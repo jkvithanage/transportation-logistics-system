@@ -795,7 +795,7 @@ class Shipment(Model):
         else:
             return False
 
-class ShipmentsController:
+class ShipmentsController(Controller):
     def menu(self):
         menu = Menu('Shipment Management',[[1, 'Create a new shipment'],
                                            [2, 'Track a shipment'],
@@ -891,7 +891,7 @@ class ShipmentsController:
         while not prompt == 'exit':
             prompt = input("Enter 'exit' to go back: ")
 
-class DeliveriesController:
+class DeliveriesController(Controller):
     def menu(self):
         menu = Menu('Delivery Management',[[1, 'Mark shipment delivery'],
                                            [2, 'View delivery status for a shipment'],
