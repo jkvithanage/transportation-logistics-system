@@ -1,6 +1,5 @@
 import re
 import datetime
-import random
 
 class Menu:
     def __init__(self, title, options= []):
@@ -11,18 +10,40 @@ class Menu:
         self.options.append([key, label])
 
     # display the menu and returns user's choice
-    def display_menu(self):
+    def display(self):
         if not len(self.options) > 0:
             print('Error: Menu has no options to display!')
-            return -1
+            return None
 
-        print('\n--|', self.title, '|--')
+        print()
+        print('--|', self.title, '|--')
+        print()
         print('Please select an option:')
 
         for option in self.options:
             print('\t' + str(option[0]) + '. ' + option[1])
 
-        return input('Enter your choice: ')
+        return self.__get_valid_choice()
+
+    # private method to get a valid choice from the user
+    def __get_valid_choice(self):
+        print()
+
+        option_keys = []
+        for option in self.options:
+            option_keys.append(option[0])
+
+        while True:
+            try:
+                choice = int(input('Enter your choice: '))
+
+                if choice in option_keys:
+                    return choice
+                else:
+                    print('Invalid choice, please choose an option from the menu.')
+            except ValueError:
+                print('Invalid input, please valid number.')
+
 
 class Table:
     def __init__(self, headers, items):
@@ -70,9 +91,12 @@ class Table:
         print("-" * (sum(column_widths) + len(self.headers) * 3 + 1)) # table bottom line
 
 class Model:
-    _instances = [] # protected list to store all instances (vehicles, customers, shipments)
-    _id_regex = ''
-    _id_pattern = ''
+    # https://pynative.com/python-class-variables/
+    # subclasses should override the following class variables
+    # to maintain their own state
+    _instances = [] # protected list to store all instances (vehicles, customers, shipments, etc)
+    _id_regex = '' # regex for id validation
+    _id_pattern = '' # the pattern of a valid id
 
     def __init__(self, object_id=None):
         self._object_id = object_id
@@ -92,6 +116,8 @@ class Model:
 
     # other public methods
 
+    # https://realpython.com/instance-class-and-static-methods-demystified/
+    # https://www.geeksforgeeks.org/decorators-in-python/
     @classmethod
     def get_all(cls):
         return cls._instances
@@ -166,8 +192,8 @@ class Vehicle(Model):
         return self._vehicle_type
 
     def set_vehicle_type(self, value):
-        if not value:
-            raise ValueError("\nVehicle type cannot be empty.")
+        if not self.__is_valid_vehicle_type(value):
+            raise ValueError("\nInvalid vehicle type. It can be only Truck, Van or Car.")
 
         self._vehicle_type = value
 
@@ -186,100 +212,131 @@ class Vehicle(Model):
     def validate(self):
         super().validate()
 
-        if not self._vehicle_type:
-            raise ValueError("\nVehicle type cannot be empty.")
+        if not self.__is_valid_vehicle_type(self._vehicle_type):
+            raise ValueError("\nInvalid vehicle type. It can be only Truck, Van or Car.")
 
         if not self.__is_valid_capacity(self._capacity):
-            raise ValueError("\nVehicle type cannot be empty.")
+            raise ValueError("\nInvalid capacity. Please enter a positive integer.")
 
     # private methods
+
+    def __is_valid_vehicle_type(self, vehicle_type):
+        match = re.search('^(Car|Van|Truck)$', vehicle_type)
+
+        if match:
+            return True
+        else:
+            return False
 
     def __is_valid_capacity(self, capacity):
         return capacity.isdigit() and int(capacity) > 0
 
-class VehiclesController:
-    def fleets_menu(self):
-        menu = Menu('Fleet Management',[[1, 'Add a vehicle'],
+class Controller:
+    def menu(self):
+        raise NotImplementedError()
+
+    # protected methods
+
+    # https://www.geeksforgeeks.org/higher-order-functions-in-python/
+    def _get_valid_input(self, prompt, setter):
+        print()
+        while True:
+            user_input = input(prompt)
+
+            try:
+                setter(user_input)
+                break
+            except ValueError as e:
+                print(e)
+
+class VehiclesController(Controller):
+    def menu(self):
+        menu = Menu('Fleet Management', [[1, 'Add a vehicle'],
                                         [2, 'Update vehicle information'],
                                         [3, 'Remove a vehicle'],
                                         [4, 'View all vehicles'],
                                         [0, 'Quit fleet management']])
-        choice = menu.display_menu()
 
-        if choice == '1':
-            # add a vehicle
-            self.add_vehicle()
-            self.fleets_menu()
-        elif choice == '2':
-            # update vehicle
-           self.update_vehicle()
-           self.fleets_menu()
-        elif choice == '3':
-            # remove a vehicle
-            self.remove_vehicle()
-            self.fleets_menu()
-        elif choice == '4':
-            # view all vehicles
-            self.view_all_vehicles()
-            self.fleets_menu()
-        elif choice == '0':
-            # quit fleet management
-            print('\nQuitting fleet management...')
-        else:
-            print('\nInvalid choice, please try again.')
-            self.fleets_menu()
+        while True:
+            choice = menu.display()
+
+            print()
+            if choice == 1:
+                # add a vehicle
+                self.add_vehicle()
+            elif choice == 2:
+                # update vehicle
+                self.update_vehicle()
+            elif choice == 3:
+                # remove a vehicle
+                self.remove_vehicle()
+            elif choice == 4:
+                # view all vehicles
+                self.view_all_vehicles()
+            elif choice == 0:
+                # quit fleet management
+                print('Quitting fleet management...')
+                break
 
     def add_vehicle(self):
-        print('\n--| Add a Vehicle |--')
+        print('--| Add a Vehicle |--')
+        print()
 
         vehicle = Vehicle()
 
         next_id = 'V00' + str(Vehicle.count() + 1)
         print('Suggested vehicle ID:', next_id)
-        self.__get_valid_input('Enter vehicle ID: ', vehicle.set_id)
-        self.__get_valid_input('Enter vehicle type: ', vehicle.set_vehicle_type)
-        self.__get_valid_input('Enter vehicle capacity: ', vehicle.set_capacity)
+        self._get_valid_input('Enter vehicle ID: ', vehicle.set_id)
+        self._get_valid_input('Enter vehicle type: ', vehicle.set_vehicle_type)
+        self._get_valid_input('Enter vehicle capacity: ', vehicle.set_capacity)
 
+        print()
         try:
             vehicle.save()
-            print('\nVehicle', vehicle.get_id(), 'added successfully.')
+            print('Vehicle', vehicle.get_id(), 'added successfully.')
         except ValueError as e:
             print(e)
 
     def update_vehicle(self):
-        print('\n--| Update Vehicle Information |--')
+        print('--| Update Vehicle Information |--')
+        print()
 
         vehicle_id = input('Enter vehicle ID: ')
         vehicle = Vehicle.find_by_id(vehicle_id)
 
         if vehicle:
             # vehicle exists
-            self.__get_valid_input('Enter vehicle type: ', vehicle.set_vehicle_type)
-            self.__get_valid_input('Enter vehicle capacity: ', vehicle.set_capacity)
-            print('\nVehicle', vehicle_id, 'updated successfully.')
+            self._get_valid_input('Enter vehicle type: ', vehicle.set_vehicle_type)
+            self._get_valid_input('Enter vehicle capacity: ', vehicle.set_capacity)
+
+            print()
+            print('Vehicle', vehicle_id, 'updated successfully.')
         else:
-            print('\nSorry, cannot find a vehicle with ID:', vehicle_id)
+            print()
+            print('Sorry, cannot find a vehicle with ID:', vehicle_id)
 
     def remove_vehicle(self):
-        print('\n--| Remove a Vehicle |--')
+        print('--| Remove a Vehicle |--')
+        print()
 
-        vehicle_id = input('\nEnter vehicle ID: ')
+        vehicle_id = input('Enter vehicle ID: ')
         vehicle = Vehicle.find_by_id(vehicle_id)
 
         if vehicle:
             # vehicle exists
-            confirmation = input('\nAre you sure you want to remove vehicle ' + vehicle_id + '? (y/n): ')
+            confirmation = input('Are you sure you want to remove vehicle ' + vehicle_id + '? (y/n): ')
 
             if confirmation.lower() in ['y', 'yes']:
                 vehicle.remove()
-                print('\nVehicle with ID', vehicle_id, 'removed successfully.')
+                print('Vehicle with ID', vehicle_id, 'removed successfully.')
             else:
-                print('\nVehicle with ID', vehicle_id, 'was not removed.')
+                print('Vehicle with ID', vehicle_id, 'was not removed.')
         else:
-            print('\nSorry, cannot find a vehicle with ID:', vehicle_id)
+            print('Sorry, cannot find a vehicle with ID:', vehicle_id)
 
     def view_all_vehicles(self):
-        print('\n--| View all Vehicles |--')
+        print('--| View all Vehicles |--')
+        print()
 
         vehicles = Vehicle.get_all()
 
@@ -291,25 +348,12 @@ class VehiclesController:
             table = Table(['Vehicle ID', 'Type', 'Capacity'], vehicle_data)
             table.display()
         else:
-            print('\nNo vehicles to display.')
+            print('No vehicles to display.')
 
+        print()
         prompt = ''
         while not prompt == 'exit':
-            prompt = input("\nEnter 'exit' to go back: ")
-
-    # private methods
-
-    # https://www.geeksforgeeks.org/higher-order-functions-in-python/
-    def __get_valid_input(self, prompt, setter):
-        valid_input = False
-        while not valid_input:
-            user_input = input(prompt)
-
-            try:
-                setter(user_input)
-                valid_input = True
-            except ValueError as e:
-                print(e)
+            prompt = input("Enter 'exit' to go back: ")
 
 class Customer(Model):
     # overriding the class variables in the super class
@@ -400,15 +444,14 @@ class Customer(Model):
         if not self.__is_valid_email(self._email):
             raise ValueError('\nInvalid email address. Please enter a valid email.')
 
+    # returns a list of shipments belong to the customer
     def get_shipments(self):
-        raise NotImplementedError()
-        shipment_data = []
-        for shipment in self._instances:
-            if shipment.get_customer_id() == self.get_customer_id():
-                shipment_data.append([])
+        shipments = []
+        for shipment in Shipment.get_all():
+            if shipment.get_customer_id() == self.get_id():
+                shipments.append(shipment)
 
-        table = Table(['Shipment ID', 'Origin', 'Destination', 'Weight', 'Vehicle ID', 'Status', 'Delivery Date'], shipment_data)
-        table.display()
+        return shipments
 
     # private methods
 
@@ -483,94 +526,102 @@ class Customer(Model):
         else:
             return False
 
-class CustomersController:
-    def customers_menu(self):
+class CustomersController(Controller):
+    def menu(self):
         menu = Menu('Customer Management',[[1, 'Add a customer'],
                                            [2, 'Update customer information'],
                                            [3, 'Remove a customer'],
                                            [4, 'View all customers'],
                                            [5, "View a customer's shipments"],
                                            [0, 'Quit customer management']])
-        choice = menu.display_menu()
 
-        if choice == '1':
-            self.add_customer()
-            self.customers_menu()
-        elif choice == '2':
-            self.update_customer()
-            self.customers_menu()
-        elif choice == '3':
-            self.remove_customer()
-            self.customers_menu()
-        elif choice == '4':
-            self.view_all_customers()
-            self.customers_menu()
-        elif choice == '5':
-            self.view_shipments()
-            self.customers_menu()
-        elif choice == '0':
-            print('\nQuitting customer management...')
-        else:
-            print('\nInvalid choice, please try again.')
-            self.customers_menu()
+        while True:
+            choice = menu.display()
+
+            print()
+            if choice == 1:
+                self.add_customer()
+            elif choice == 2:
+                self.update_customer()
+            elif choice == 3:
+                self.remove_customer()
+            elif choice == 4:
+                self.view_all_customers()
+            elif choice == 5:
+                self.view_shipments()
+            elif choice == 0:
+                print('Quitting customer management...')
+                break
 
     def add_customer(self):
-        print('\n--| Add a Customer |--')
+        print('--| Add a Customer |--')
+        print()
 
         customer = Customer()
 
         next_id = 'C00' + str(Customer.count() + 1)
         print('Suggested customer ID:', next_id)
-        self.__get_valid_input('Enter customer ID: ', customer.set_id)
-        self.__get_valid_input('Enter customer name: ', customer.set_name)
-        self.__get_valid_input('Enter date of birth (DD/MM/YYYY): ', customer.set_dob)
-        self.__get_valid_input('Enter address: ', customer.set_address)
-        self.__get_valid_input('Enter phone number', customer.set_phone)
-        self.__get_valid_input('Enter emai address: ', customer.set_email)
+        self._get_valid_input('Enter customer ID: ', customer.set_id)
+
+        self._get_valid_input('Enter customer name: ', customer.set_name)
+        self._get_valid_input('Enter date of birth (DD/MM/YYYY): ', customer.set_dob)
+        self._get_valid_input('Enter address (e.g: 123 Main St, Sydney, NSW 2000, Australia): ', customer.set_address)
+        self._get_valid_input('Enter phone number: (e.g: 04xxxxxxxx)', customer.set_phone)
+        self._get_valid_input('Enter email address (e.g: user@example.com): ', customer.set_email)
 
         try:
             customer.save()
-            print('\nCustomer', customer.get_id(), 'added successfully.')
+
+            print()
+            print('Customer', customer.get_id(), 'added successfully.')
         except ValueError as e:
             print(e)
 
     def update_customer(self):
-        print('\n--| Update Customer Information |--')
+        print('--| Update Customer Information |--')
+        print()
 
         customer_id = input('Enter customer ID: ')
         customer = Customer.find_by_id(customer_id)
 
         if customer:
             # customer exists
-            self.__get_valid_input('Enter customer name: ', customer.set_name)
-            self.__get_valid_input('Enter date of birth (DD/MM/YYYY): ', customer.set_dob)
-            self.__get_valid_input('Enter address: ', customer.set_address)
-            self.__get_valid_input('Enter phone number', customer.set_phone)
-            self.__get_valid_input('Enter emai address: ', customer.set_email)
-            print('\nCustomer', customer_id, 'updated successfully.')
+            self._get_valid_input('Enter customer name: ', customer.set_name)
+            self._get_valid_input('Enter date of birth (DD/MM/YYYY): ', customer.set_dob)
+            self._get_valid_input('Enter address (e.g: 123 Main St, Sydney, NSW 2000, Australia): ', customer.set_address)
+            self._get_valid_input('Enter phone number: (e.g: 04xxxxxxxx)', customer.set_phone)
+            self._get_valid_input('Enter email address (e.g: user@example.com): ', customer.set_email)
+
+            print()
+            print('Customer', customer_id, 'updated successfully.')
         else:
-            print('\nSorry, cannot find a customer with ID:', customer_id)
+            print()
+            print('Sorry, cannot find a customer with ID:', customer_id)
 
     def remove_customer(self):
-        print('\n--| Remove a Customer |--')
+        print('--| Remove a Customer |--')
+        print()
 
         customer_id = input('Enter customer ID: ')
         customer = Customer.find_by_id(customer_id)
 
+        print()
         if customer:
             # customer exists
             confirmation = input('Are you sure you want to remove customer ' + customer_id + '? (y/n): ')
 
+            print()
             if confirmation.lower() in ['y', 'yes']:
                 customer.remove()
-                print('\nCustomer with ID', customer_id, 'removed successfully.')
+                print('Customer with ID', customer_id, 'removed successfully.')
             else:
-                print('\nCustomer with ID', customer_id, 'was not removed.')
+                print('Customer with ID', customer_id, 'was not removed.')
         else:
-            print('\nSorry, cannot find a customer with ID:', customer_id)
+            print('Sorry, cannot find a customer with ID:', customer_id)
 
     def view_all_customers(self):
-        print('\n--| View all Customers |--')
+        print('--| View all Customers |--')
+        print()
 
         customers = Customer.get_all()
 
@@ -584,35 +635,42 @@ class CustomersController:
         else:
             print('No customers to display.')
 
+        print()
         prompt = ''
         while not prompt == 'exit':
             prompt = input("Enter 'exit' to go back: ")
 
     def view_shipments(self):
-        print('\n--| View Shipments |--')
+        print('--| View Shipments |--')
+        print()
 
         customer_id = input('Enter customer ID: ')
         customer = Customer.find_by_id(customer_id)
 
+        print()
         if customer:
             # customer exists
-            customer.get_shipments()
+            shipments = customer.get_shipments()
+
+            shipment_data = []
+            for shipment in shipments:
+                shipment_data.append([shipment.get_id(),
+                                        shipment.get_origin(),
+                                        shipment.get_destination(),
+                                        shipment.get_weight(),
+                                        shipment.get_vehicle_id(),
+                                        shipment.get_status(),
+                                        shipment.get_delivery_date()])
+
+            table = Table(['Shipment ID', 'Origin', 'Destination', 'Weight', 'Vehicle ID', 'Status', 'Delivery Date'], shipment_data)
+            table.display()
+
+            print()
+            prompt = ''
+            while not prompt == 'exit':
+                prompt = input("Enter 'exit' to go back: ")
         else:
-            print('\nSorry, cannot find a customer with ID:', customer_id)
-
-    # private methods
-
-    # https://www.geeksforgeeks.org/higher-order-functions-in-python/
-    def __get_valid_input(self, prompt, setter):
-        valid_input = False
-        while not valid_input:
-            user_input = input(prompt)
-
-            try:
-                setter(user_input)
-                valid_input = True
-            except ValueError as e:
-                print(e)
+            print('Sorry, cannot find a customer with ID:', customer_id)
 
 class Shipment(Model):
     # overriding the class variables in the super class
@@ -719,7 +777,7 @@ class Shipment(Model):
     # private methods
 
     def __is_valid_weight(self, weight):
-        return isinstance(weight, (int, float)) or weight <= 0
+        return isinstance(weight, (int, float)) or weight > 0
 
     def __is_valid_vehicle_id(self, vehicle_id):
         vehicle = Vehicle.find_by_id(vehicle_id)
@@ -738,66 +796,79 @@ class Shipment(Model):
             return False
 
 class ShipmentsController:
-    def shipments_menu(self):
+    def menu(self):
         menu = Menu('Shipment Management',[[1, 'Create a new shipment'],
                                            [2, 'Track a shipment'],
                                            [3, 'View all shipments'],
                                            [0, 'Quit shipment management',]])
-        choice = menu.display_menu()
 
-        if choice == '1':
-            self.create_shipment()
-            self.shipments_menu()
-        elif choice == '2':
-            self.track_shipment()
-            self.shipments_menu()
-        elif choice == '3':
-            self.view_all_shipments()
-            self.shipments_menu()
-        elif choice == '0':
-            print('\nQuitting customer management...')
-        else:
-            print('\nInvalid choice, please try again.')
-            self.shipments_menu()
+        while True:
+            choice = menu.display()
+
+            print()
+            if choice == 1:
+                self.create_shipment()
+            elif choice == 2:
+                self.track_shipment()
+            elif choice == 3:
+                self.view_all_shipments()
+            elif choice == 0:
+                print('Quitting customer management...')
+                break
 
     def create_shipment(self):
-        print('\n--| Create a Shipment |--')
+        print('--| Create a Shipment |--')
+        print()
 
         shipment = Shipment()
 
         next_id = 'S00' + str(Shipment.count() + 1)
         print('Suggested shipment ID:', next_id)
-        self.__get_valid_input('Enter shipment ID: ', shipment.set_id)
+        self._get_valid_input('Enter shipment ID: ', shipment.set_id)
 
-        self.__get_valid_input('Enter origin location: ', shipment.set_origin)
-        self.__get_valid_input('Enter destination location: ', shipment.set_destination)
-        self.__get_valid_input('Enter weight: ', shipment.set_weight)
+        self._get_valid_input('Enter origin location: ', shipment.set_origin)
+        self._get_valid_input('Enter destination location: ', shipment.set_destination)
+        self._get_valid_input('Enter weight: ', shipment.set_weight)
 
-        Vehicle.get_all()
-        self.__get_valid_input('Enter vehicle ID: ', shipment.set_vehicle_id)
+        vehicles = Vehicle.get_all()
 
-        Customer.get_all()
-        self.__get_valid_input('Enter customer ID: ', shipment.set_customer_id)
+        vehicle_data = []
+        for vehicle in vehicles:
+            vehicle_data.append([vehicle.get_id(), vehicle.get_vehicle_type(), vehicle.get_capacity()])
+
+        if len(vehicle_data) > 0:
+            table = Table(['Vehicle ID', 'Type', 'Capacity'], vehicle_data)
+            table.display()
+        else:
+            print('No vehicles to display.')
+        self._get_valid_input('Enter vehicle ID: ', shipment.set_vehicle_id)
+
+        self._get_valid_input('Enter customer ID: ', shipment.set_customer_id)
 
         try:
             shipment.save()
-            print('\nShipment', shipment.get_id(), 'added successfully.')
+
+            print()
+            print('Shipment', shipment.get_id(), 'added successfully.')
         except ValueError as e:
             print(e)
 
     def track_shipment(self):
-        print('\n--| Track a Shipment |--')
+        print('--| Track a Shipment |--')
+        print()
 
         shipment_id = input('Enter shipment ID: ')
         shipment = Shipment.find_by_id(shipment_id)
 
+        print()
         if shipment:
-            print('\nStatus of the shipment', shipment_id, 'is:', shipment.get_status())
+            print('Status of the shipment', shipment_id, 'is:', shipment.get_status())
         else:
-            print('\nSorry, cannot find a shipment with ID:', shipment_id)
+            print('Sorry, cannot find a shipment with ID:', shipment_id)
 
     def view_all_shipments(self):
-        print('\n--| View all Shipments |--')
+        print('--| View all Shipments |--')
+        print()
 
         shipments = Shipment.get_all()
 
@@ -815,72 +886,62 @@ class ShipmentsController:
         table = Table(['Shipment ID', 'Origin', 'Destination', 'Weight', 'Vehicle', 'Customer', 'Status', 'Delivery Date'], shipment_data)
         table.display()
 
+        print()
         prompt = ''
         while not prompt == 'exit':
-            prompt = input("\nEnter 'exit' to go back: ")
+            prompt = input("Enter 'exit' to go back: ")
 
 class DeliveriesController:
-    def deliveries_menu(self):
+    def menu(self):
         menu = Menu('Delivery Management',[[1, 'Mark shipment delivery'],
                                            [2, 'View delivery status for a shipment'],
                                            [0, 'Quit shipment management',]])
-        choice = menu.display_menu()
 
-        if choice == '1':
-            self.mark_shipment_delivered()
-            self.deliveries_menu()
-        elif choice == '2':
-            self.view_delivery_status()
-            self.deliveries_menu()
-        elif choice == '0':
-            print('\nQuitting delivery management...')
-        else:
-            print('\nInvalid choice, please try again.')
-            self.deliveries_menu()
+        while True:
+            choice = menu.display()
+
+            print()
+            if choice == 1:
+                self.mark_shipment_delivered()
+            elif choice == 2:
+                self.view_delivery_status()
+            elif choice == 0:
+                print('\nQuitting delivery management...')
+                break
 
     def mark_shipment_delivered(self):
-        print('\n--| Mark Shipment Delivery |--')
+        print('--| Mark Shipment Delivery |--')
+        print()
 
         shipment_id = input('Enter shipment ID: ')
         shipment = Shipment.find_by_id(shipment_id)
 
+        print()
         if shipment:
             is_marked = shipment.mark_delivered()
             if is_marked:
-                print('\nShipment', shipment_id, 'has been marked as delivered.')
+                print('Shipment', shipment_id, 'has been marked as delivered.')
             else:
-                print('\nShipment with ID:', shipment_id, 'is already delivered.')
+                print('Shipment with ID:', shipment_id, 'is already delivered.')
         else:
-            print('\nSorry, cannot find a shipment with ID:', shipment_id)
+            print('Sorry, cannot find a shipment with ID:', shipment_id)
 
     def view_delivery_status(self):
-        print('\n--| View Delivery Status |--')
+        print('--| View Delivery Status |--')
+        print()
 
         shipment_id = input('Enter shipment ID: ')
         shipment = Shipment.find_by_id(shipment_id)
 
+        print()
         if shipment:
-            if shipment.get_delivery_status() == 'Delivered':
+            if shipment.get_status() == 'Delivered':
                 # referred https://strftime.org/ to find the mask
-                print('\nShipment', shipment_id, 'was delivered on', shipment.get_delivery_date())
+                print('Shipment', shipment_id, 'was delivered on', shipment.get_delivery_date())
             else:
-                print('\nShipment', shipment_id, 'is not delivered yet.')
+                print('Shipment', shipment_id, 'is not delivered yet.')
         else:
-            print('\nSorry, cannot find a shipment with ID:', shipment_id)
-
-    # private methods
-
-    # https://www.geeksforgeeks.org/higher-order-functions-in-python/
-    def __get_valid_input(self, prompt, setter):
-        valid_input = False
-        while not valid_input:
-            user_input = input(prompt)
-
-            try:
-                setter(user_input)
-                valid_input = True
-            except ValueError as e:
-                print(e)
+            print('Sorry, cannot find a shipment with ID:', shipment_id)
 
 class Main:
     def __init__(self):
@@ -889,52 +950,29 @@ class Main:
         self.shipments_controller = ShipmentsController()
         self.deliveries_controller = DeliveriesController()
 
-    def main_menu(self):
+    def menu(self):
         menu = Menu('Transportation Logistics System', [[1, 'Fleet Management'],
                                                         [2, 'Customer Management'],
                                                         [3, 'Shipment Management'],
                                                         [4, 'Delivery Management'],
                                                         [0, 'Quit']])
 
-        choice = menu.display_menu()
+        while True:
+            choice = menu.display()
 
-        if choice == '1':
-            self.vehicles_controller.fleets_menu()
-            self.main_menu()
-        elif choice == '2':
-            self.customers_controller.customers_menu()
-            self.main_menu()
-        elif choice == '3':
-            self.shipments_controller.shipments_menu()
-            self.main_menu()
-        elif choice == '4':
-            self.deliveries_controller.deliveries_menu()
-            self.main_menu()
-        elif choice == '0':
-            print('\nExiting the system. Goodbye!')
-        else:
-            print('\nInvalid choice, please try again.')
-            # call run() method recursively
-            self.main_menu()
-
-try:
-    for i in range(10):
-        v = Vehicle('V00' + str(i + 1), random.choice(['Truck', 'Van', 'Car']), str(random.choice([100, 200, 300, 400, 500])))
-        v.save()
-
-    for i in range(10):
-        c = Customer('C00' + str(i + 1), 'test name', '10/10/1990', '123 Main St, Sydney, NSW 2000, Australia', '0451506271', 'user@example.com')
-        c.save()
-
-    for i in range(20):
-        s = Shipment('S00' + str(i + 1), 'Melbourne', 'Sydney', random.randint(10, 100), 'V001', 'C001')
-        s.save()
-except ValueError as e:
-    print(e)
-
-# Vehicle.get_all()
-# Customer.get_all()
-# Shipment.get_all()
+            # else statement is not required
+            # since the display() method only returns a valid choice
+            if choice == 1:
+                self.vehicles_controller.menu()
+            elif choice == 2:
+                self.customers_controller.menu()
+            elif choice == 3:
+                self.shipments_controller.menu()
+            elif choice == 4:
+                self.deliveries_controller.menu()
+            elif choice == 0:
+                print('Exiting the system. Goodbye!')
+                break
 
 main = Main()
-main.main_menu()
+main.menu()
